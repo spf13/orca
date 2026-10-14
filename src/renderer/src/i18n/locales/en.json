@@ -14827,6 +14827,23 @@
             "scanning": "Scanning {{value0}}",
             "checking": "Checking {{value0}}",
             "scanned": "Scanned {{value0}}"
+          },
+          "run": {
+            "source": {
+              "control": {
+                "agent": {
+                  "action": {
+                    "start": {
+                      "git": {
+                        "operation": {
+                          "running": "Wait for the running Git operation to finish."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
