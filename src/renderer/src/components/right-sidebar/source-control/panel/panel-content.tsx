@@ -42,6 +42,7 @@ export function SourceControlPanelContent(props: SourceControlPanelReadyProps) {
     handleUnstagePaths,
     hasUncommittedEntries,
     isAbortingOperation,
+    isRemoteOperationActive,
     isExecutingBulk,
     isGitHistoryVisible,
     loadCommitFiles,
@@ -86,6 +87,7 @@ export function SourceControlPanelContent(props: SourceControlPanelReadyProps) {
         unresolvedConflictCount={unresolvedConflictReviewEntries.length}
         conflictOperation={conflictOperation}
         sourceControlAiActionsVisible={sourceControlAiActionsVisible}
+        isRemoteOperationActive={isRemoteOperationActive}
         isAbortingOperation={isAbortingOperation}
         onAbortOperation={handleAbortOperationForConflict}
         onResolveWithAi={() => void handleResolveConflictsWithAI()}
