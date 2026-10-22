@@ -29,7 +29,12 @@ export function useFloatingTerminalOrchestrationVisibility({
     try {
       const status = await window.api.cli.getInstallStatus()
       if (mountedRef.current) {
-        setShowOrchestrationSetup(!isOrcaCliAvailableOnPath(status))
+        // Why: web and unpackaged launch modes report 'unsupported' because CLI
+        // registration is not managed locally; once the orchestration setup
+        // marker is present, keep the setup prompt hidden.
+        setShowOrchestrationSetup(
+          status?.state !== 'unsupported' && !isOrcaCliAvailableOnPath(status)
+        )
       }
     } catch {
       if (mountedRef.current) {
