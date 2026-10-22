@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeGitContext } from '@/runtime/runtime-git-client-context'
 import { admitSourceControlRecovery } from './source-control-recovery-admission'
+import { deferred } from './source-control-hook-test-harness'
 
 const mocks = vi.hoisted(() => ({ probe: vi.fn(), toastError: vi.fn() }))
 vi.mock('@/runtime/runtime-git-status-client', () => ({
@@ -37,4 +38,22 @@ describe('source-control recovery admission', () => {
     await expect(admitSourceControlRecovery(context)).resolves.toBe(true)
     expect(mocks.toastError).not.toHaveBeenCalled()
   })
+
+  it.each([false, true, 'unsupported'] as const)(
+    'ignores a cancelled check returning %s',
+    async (result) => {
+      const check = deferred<{ inFlight: boolean }>()
+      mocks.probe.mockReturnValueOnce(check.promise)
+      const controller = new AbortController()
+      const admission = admitSourceControlRecovery(context, controller.signal)
+      controller.abort()
+      if (result === 'unsupported') {
+        check.reject(new Error('method_not_found'))
+      } else {
+        check.resolve({ inFlight: result })
+      }
+      await expect(admission).resolves.toBe(false)
+      expect(mocks.toastError).not.toHaveBeenCalled()
+    }
+  )
 })

@@ -37,16 +37,19 @@ export function useConflictRecoveryComposer({
     [target, activeWorktreeId, activeConnectionId, worktreePath]
   )
   const scope = context ? sourceControlRecoveryScopeKey(context) : null
-  const currentScopeRef = useRef(scope)
-  const checkingScopesRef = useRef(new Set<string>())
-  const [openScope, setOpenScope] = useState<string | null>(null)
-  const [checkingScope, setCheckingScope] = useState<string | null>(null)
+  const checkRef = useRef<AbortController | null>(null)
+  const [composer, setComposer] = useState<{
+    scope: string
+    phase: 'checking' | 'open'
+  } | null>(null)
+  const cancelCheck = useCallback(() => {
+    checkRef.current?.abort()
+    checkRef.current = null
+  }, [])
   useEffect(() => {
-    currentScopeRef.current = scope
-    return () => {
-      currentScopeRef.current = null
-    }
-  }, [scope])
+    setComposer(null)
+    return cancelCheck
+  }, [scope, cancelCheck])
 
   const resolveConflictsPrompt = useMemo(
     () =>
@@ -59,17 +62,13 @@ export function useConflictRecoveryComposer({
   )
   const setResolveConflictsComposerOpen = useCallback(
     (open: boolean): void => {
-      setOpenScope(open ? scope : null)
+      cancelCheck()
+      setComposer(open && scope ? { scope, phase: 'open' } : null)
     },
-    [scope]
+    [scope, cancelCheck]
   )
   const handleResolveConflictsWithAI = useCallback(async (): Promise<void> => {
-    if (
-      !context ||
-      !scope ||
-      currentScopeRef.current !== scope ||
-      checkingScopesRef.current.has(scope)
-    ) {
+    if (!context || !scope || checkRef.current) {
       return
     }
     if (unresolvedConflicts.length === 0 && conflictOperation === 'unknown') {
@@ -81,23 +80,26 @@ export function useConflictRecoveryComposer({
       )
       return
     }
-    checkingScopesRef.current.add(scope)
-    setCheckingScope(scope)
+    const check = new AbortController()
+    checkRef.current = check
+    setComposer({ scope, phase: 'checking' })
     try {
-      if ((await admitSourceControlRecovery(context)) && currentScopeRef.current === scope) {
-        setOpenScope(scope)
+      const admitted = await admitSourceControlRecovery(context, check.signal)
+      if (!check.signal.aborted) {
+        setComposer(admitted ? { scope, phase: 'open' } : null)
       }
     } finally {
-      checkingScopesRef.current.delete(scope)
-      setCheckingScope((current) => (current === scope ? null : current))
+      if (checkRef.current === check) {
+        checkRef.current = null
+      }
     }
   }, [context, scope, conflictOperation, unresolvedConflicts.length])
 
   return {
     resolveConflictsPrompt,
     resolveConflictsRecoveryContext: context,
-    resolveConflictsComposerOpen: scope !== null && openScope === scope,
-    isCheckingRecoveryAdmission: scope !== null && checkingScope === scope,
+    resolveConflictsComposerOpen: composer?.scope === scope && composer?.phase === 'open',
+    isCheckingRecoveryAdmission: composer?.scope === scope && composer?.phase === 'checking',
     setResolveConflictsComposerOpen,
     handleResolveConflictsWithAI
   }

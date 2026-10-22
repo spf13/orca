@@ -13,14 +13,20 @@ export function sourceControlRecoveryScopeKey(context: RuntimeGitContext): strin
 }
 
 /** Blocks only on Orca Git work the host reports; the agent's prompt covers Git started elsewhere. */
-export async function admitSourceControlRecovery(context: RuntimeGitContext): Promise<boolean> {
+export async function admitSourceControlRecovery(
+  context: RuntimeGitContext,
+  signal?: AbortSignal
+): Promise<boolean> {
   try {
     if (!(await getRuntimeGitMutationInFlight(context)).inFlight) {
-      return true
+      return !signal?.aborted
     }
   } catch {
     // Older hosts lack the method; an unreachable host fails the launch itself.
-    return true
+    return !signal?.aborted
+  }
+  if (signal?.aborted) {
+    return false
   }
   toast.error(
     translate(

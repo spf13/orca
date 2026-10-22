@@ -9,6 +9,7 @@ import { getDefaultSettings } from '../../../../../../shared/constants'
 import type { GitConflictOperation } from '../../../../../../shared/git-status-types'
 import { useSourceControlAi } from './use-ai'
 import type { SourceControlAiControllerParams } from './controller-types'
+import { deferred } from '../../source-control-hook-test-harness'
 const mutationInFlight = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/runtime-git-status-client', async (importOriginal) => ({
   ...(await importOriginal<typeof RuntimeGitStatusClientModule>()),
@@ -112,5 +113,76 @@ describe('AI operation recovery composer', () => {
       worktreePath: path.resolve('tmp', 'wt-1'),
       connectionId: undefined
     })
+  })
+
+  it('closes the composer on navigation and keeps it closed when returning', async () => {
+    const first = controllerParams()
+    const other = controllerParams({
+      activeWorktreeId: 'wt-2',
+      worktreePath: path.resolve('tmp', 'wt-2')
+    })
+    const view = renderHook(useSourceControlAi, { initialProps: first })
+    await act(() => view.result.current.handleResolveConflictsWithAI())
+    expect(view.result.current.resolveConflictsComposerOpen).toBe(true)
+    view.rerender(other)
+    expect(view.result.current.resolveConflictsComposerOpen).toBe(false)
+    view.rerender(first)
+    expect(view.result.current.resolveConflictsComposerOpen).toBe(false)
+  })
+
+  it.each(['worktree', 'host'] as const)(
+    'ignores an old check after leaving and returning to a %s',
+    async (change) => {
+      const oldCheck = deferred<{ inFlight: boolean }>()
+      const newCheck = deferred<{ inFlight: boolean }>()
+      mutationInFlight.mockReturnValueOnce(oldCheck.promise).mockReturnValueOnce(newCheck.promise)
+      const first = controllerParams()
+      const other = controllerParams(
+        change === 'worktree'
+          ? { activeWorktreeId: 'wt-2', worktreePath: path.resolve('tmp', 'wt-2') }
+          : { target: { kind: 'environment', environmentId: 'host-2' } }
+      )
+      const view = renderHook(useSourceControlAi, { initialProps: first })
+      let oldOpening: Promise<void> = Promise.resolve()
+      act(() => {
+        oldOpening = view.result.current.handleResolveConflictsWithAI()
+      })
+      view.rerender(other)
+      view.rerender(first)
+      expect(view.result.current.isCheckingRecoveryAdmission).toBe(false)
+      let newOpening: Promise<void> = Promise.resolve()
+      act(() => {
+        newOpening = view.result.current.handleResolveConflictsWithAI()
+      })
+      await act(async () => {
+        oldCheck.resolve({ inFlight: false })
+        await oldOpening
+      })
+      expect(view.result.current.resolveConflictsComposerOpen).toBe(false)
+      expect(view.result.current.isCheckingRecoveryAdmission).toBe(true)
+      await act(async () => {
+        newCheck.resolve({ inFlight: false })
+        await newOpening
+      })
+      expect(view.result.current.resolveConflictsComposerOpen).toBe(true)
+      expect(view.result.current.isCheckingRecoveryAdmission).toBe(false)
+    }
+  )
+
+  it('cancels a pending check when the composer is closed', async () => {
+    const check = deferred<{ inFlight: boolean }>()
+    mutationInFlight.mockReturnValue(check.promise)
+    const view = renderHook(() => useSourceControlAi(controllerParams()))
+    let opening: Promise<void> = Promise.resolve()
+    act(() => {
+      opening = view.result.current.handleResolveConflictsWithAI()
+    })
+    act(() => view.result.current.setResolveConflictsComposerOpen(false))
+    await act(async () => {
+      check.resolve({ inFlight: false })
+      await opening
+    })
+    expect(view.result.current.resolveConflictsComposerOpen).toBe(false)
+    expect(view.result.current.isCheckingRecoveryAdmission).toBe(false)
   })
 })

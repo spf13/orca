@@ -35,6 +35,7 @@ type RunSourceControlAgentActionStartArgs = {
   launchPlatform?: NodeJS.Platform
   launchSource: LaunchSource
   recoveryContext?: RuntimeGitContext | null
+  signal?: AbortSignal
   onStart?: (args: {
     agent: TuiAgent
     commandInput: string
@@ -76,6 +77,7 @@ export async function runSourceControlAgentActionStart({
   launchPlatform,
   launchSource,
   recoveryContext,
+  signal,
   onStart,
   onSaveAgentDefault,
   onLaunchAccepted,
@@ -84,7 +86,13 @@ export async function runSourceControlAgentActionStart({
   onClose
 }: RunSourceControlAgentActionStartArgs): Promise<boolean> {
   // Detection and delivery planning can outlive the state that opened the composer.
-  if (recoveryContext && !(await admitSourceControlRecovery(recoveryContext))) {
+  if (signal?.aborted) {
+    return false
+  }
+  if (recoveryContext && !(await admitSourceControlRecovery(recoveryContext, signal))) {
+    return false
+  }
+  if (signal?.aborted) {
     return false
   }
   let launched = false
@@ -182,6 +190,8 @@ export async function runSourceControlAgentActionStart({
     }
   }
   onLaunched?.()
-  onClose()
+  if (!signal?.aborted) {
+    onClose()
+  }
   return true
 }

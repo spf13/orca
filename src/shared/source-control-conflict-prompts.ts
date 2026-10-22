@@ -102,13 +102,18 @@ function buildPausedOperationPrompt({
     '- Run git status to learn why Git stopped. Common causes: resolutions are staged and only the continue step remains, a commit hook failed, a rebase exec command failed, or the replayed commit became empty.',
     '- If Git stopped because the user asked it to (a rebase edit or break step, or a merge started with --no-commit), report what is pending and ask before continuing.',
     '- If a hook or exec command failed, fix the cause with minimal edits and stage the fix before continuing.',
+    ...(conflictOperation === 'rebase'
+      ? [
+          '- After a failed rebase exec, Git may require the staged fix to be committed before continuing. Verify HEAD is the replayed commit and the index contains only this fix, then use git commit --amend --no-edit. If unrelated staged changes prevent that, stop and ask the user. Rerun the failed exec command successfully before git rebase --continue.'
+        ]
+      : []),
     ...(skipCommand
       ? [`- If the replayed commit is empty or should not be applied, use ${skipCommand}.`]
       : []),
     `- Run ${continueCommand}. If the operation stops on conflicts, resolve them by inspecting both sides and nearby code, stage them, and continue. Repeat from git status until it completes or you hit an unsafe state that needs the user.`,
     '- Protect unrelated staged and unstaged changes. Do not run broad cleanup commands like git reset --hard, git checkout ., git restore ., git stash, or abort commands.',
     '- Run git diff --check before finishing. Run obvious focused tests or typechecks when reasonably scoped.',
-    '- Do not push or create unrelated/manual commits. Only let the current git operation create its normal commit(s).',
+    '- Do not push or create unrelated commits. Let the current git operation create its normal commit(s).',
     '',
     'Reply with why Git paused, what you changed, validation run, the final git status, and anything left unsafe.'
   ].join('\n')
